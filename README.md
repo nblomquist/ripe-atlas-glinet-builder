@@ -62,6 +62,10 @@ OpenWrt 22.03.5's `mediatek/mt7622` target produces that package architecture. T
 
 ## Quick start: build on Debian 13
 
+The OpenWrt build tree is large. A completed build used about `11G` in
+`.build/`; keep at least `15G` of free disk space available for the build
+workspace.
+
 ```sh
 git clone <your repo url> ripe-atlas-glinet-builder
 cd ripe-atlas-glinet-builder
