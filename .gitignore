@@ -1,0 +1,9 @@
+.build/
+dist/
+.idea/
+*.ipk
+*.log
+*.tmp
+*.swp
+.DS_Store
+__pycache__/
