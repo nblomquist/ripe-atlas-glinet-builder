@@ -143,12 +143,8 @@ MISSING_PKGS=""
 
 for pkg in \
     build-essential \
-    clang \
-    flex \
-    bison \
     g++ \
     gawk \
-    gcc-multilib \
     gettext \
     git \
     libncurses-dev \
