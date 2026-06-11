@@ -1,0 +1,5 @@
+--- a/configure.py
++++ b/configure.py
+@@ -26 +26 @@
+-import pipes
++import shlex as pipes

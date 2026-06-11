@@ -18,6 +18,8 @@ TREE_DIR="${TREE_DIR:-$BUILD_ROOT/openwrt-22-ripe}"
 DIST_DIR="${DIST_DIR:-$(pwd)/dist}"
 JOBS="${JOBS:-1}"
 ASSUME_YES="${ASSUME_YES:-0}"
+SCRIPT_DIR="$(CDPATH= cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 
 RIPE_FEED_LINE="src-git ripeatlas https://github.com/RIPE-NCC/ripe-atlas-software-probe.git;$RIPE_TAG"
 
@@ -214,14 +216,8 @@ grep 'RIPE-NCC/ripe-atlas-software-probe' feeds.conf
 section "Patch Ninja for Python 3.13"
 
 mkdir -p tools/ninja/patches
-
-cat > tools/ninja/patches/101-python313-shlex-instead-of-pipes.patch <<'PATCH'
---- a/configure.py
-+++ b/configure.py
-@@ -26 +26 @@
--import pipes
-+import shlex as pipes
-PATCH
+cp "$REPO_ROOT/patches/openwrt-22.03.5/ninja/101-python313-shlex-instead-of-pipes.patch" \
+   tools/ninja/patches/
 
 section "Update/install feeds"
 
@@ -237,13 +233,7 @@ section "Update/install feeds"
 
 section "Create OpenWrt .config"
 
-cat > .config <<'EOF'
-CONFIG_TARGET_mediatek=y
-CONFIG_TARGET_mediatek_mt7622=y
-CONFIG_PACKAGE_ripe-atlas-common=m
-CONFIG_PACKAGE_ripe-atlas-probe=m
-# CONFIG_PACKAGE_ripe-atlas-anchor is not set
-EOF
+cp "$REPO_ROOT/configs/openwrt-22.03.5/mediatek-mt7622-ripe-atlas.config" .config
 
 make defconfig
 
@@ -348,45 +338,8 @@ esac
 printf 'Original Depends:\n'
 grep '^Depends:' "$CONTROL_DIR/control" || true
 
-python3 - "$CONTROL_DIR/control" <<'PY'
-from pathlib import Path
-import re
-import sys
-
-p = Path(sys.argv[1])
-text = p.read_text()
-
-lines = text.splitlines()
-out = []
-changed = False
-i = 0
-
-while i < len(lines):
-    line = lines[i]
-    if line.startswith("Depends:"):
-        field_lines = [line]
-        i += 1
-        while i < len(lines) and (lines[i].startswith(" ") or lines[i].startswith("\t")):
-            field_lines.append(lines[i])
-            i += 1
-        field = "\n".join(field_lines)
-        new_field = re.sub(
-            r'(?<![A-Za-z0-9_.+-])chrony(?![A-Za-z0-9_.+-])',
-            'chrony-nts',
-            field,
-        )
-        if new_field != field:
-            changed = True
-        out.extend(new_field.splitlines())
-        continue
-    out.append(line)
-    i += 1
-
-if not changed:
-    raise SystemExit("ERROR: did not find dependency token 'chrony' in Depends field")
-
-p.write_text("\n".join(out) + "\n")
-PY
+python3 "$REPO_ROOT/scripts/rewrite-control-dependency.py" \
+    "$CONTROL_DIR/control" chrony chrony-nts
 
 printf 'Modified Depends:\n'
 grep '^Depends:' "$CONTROL_DIR/control" || true
