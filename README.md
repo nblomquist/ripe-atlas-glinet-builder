@@ -1,6 +1,8 @@
 # RIPE Atlas GL.iNet Builder
 
-Build RIPE Atlas software probe `.ipk` packages for GL.iNet OpenWrt-based routers.
+Build [RIPE Atlas](https://atlas.ripe.net/) software probe `.ipk` packages for GL.iNet [OpenWrt](https://openwrt.org/)-based routers.
+
+The RIPE Atlas software probe source is available on [GitHub](https://github.com/RIPE-NCC/ripe-atlas-software-probe).
 
 The initial validated target is:
 
