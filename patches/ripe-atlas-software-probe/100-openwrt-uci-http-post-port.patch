@@ -1,0 +1,36 @@
+diff --git a/openwrt/files/ripe-atlas.init b/openwrt/files/ripe-atlas.init
+index 3075844..5010966 100755
+--- a/openwrt/files/ripe-atlas.init
++++ b/openwrt/files/ripe-atlas.init
+@@ -12,7 +12,8 @@ validate_config()
+ 		'enabled:uinteger:1' \
+ 		'log_console:uinteger:0' \
+ 		'mode:string:prod' \
+-		'rxtx_report:uinteger:0'
++		'rxtx_report:uinteger:0' \
++		'http_post_port:uinteger:0'
+ }
+ 
+ create_dir()
+@@ -106,6 +107,9 @@ start_instance()
+ 	if [ ${rxtx_report} -ne 0 ]; then
+ 		echo 'RXTXRPT=yes' >> "${cfg}"
+ 	fi
++	if [ ${http_post_port} -ne 0 ]; then
++		echo "HTTP_POST_PORT=${http_post_port}" >> "${cfg}"
++	fi
+ 	echo "${mode}" > "${mod}"
+ 
+ 	procd_open_instance
+diff --git a/openwrt/files/ripe-atlas.uci-defaults b/openwrt/files/ripe-atlas.uci-defaults
+index 92e832f..7ef3aa6 100644
+--- a/openwrt/files/ripe-atlas.uci-defaults
++++ b/openwrt/files/ripe-atlas.uci-defaults
+@@ -12,6 +12,7 @@ set ripe-atlas.@ripe-atlas[0].enabled='1'
+ set ripe-atlas.@ripe-atlas[0].mode='prod'
+ set ripe-atlas.@ripe-atlas[0].log_console='0'
+ set ripe-atlas.@ripe-atlas[0].rxtx_report='0'
++set ripe-atlas.@ripe-atlas[0].http_post_port='0'
+ commit ripe-atlas
+ EOF
+ fi

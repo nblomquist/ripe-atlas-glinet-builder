@@ -29,6 +29,8 @@ libopenssl-conf - 1.1.1q-1
 libopenssl1.1 - 1.1.1q-1
 ```
 
+The router facts match this repo's expected package compatibility target: OpenWrt 21.02-SNAPSHOT-derived GL.iNet firmware, `aarch64_cortex-a53`, OpenSSL 1.1, and `chrony-nts`.
+
 ## Build target
 
 OpenWrt 22.03.5 did not expose an MT7981/Filogic target in the same way as newer OpenWrt trees. It did expose MediaTek ARM subtargets including MT7622.
@@ -117,6 +119,81 @@ Final desired dependency line:
 Depends: libc, e2fsprogs, jsonfilter, openssh-client, openssh-keygen, libopenssl1.1, chrony-nts, bzip2
 ```
 
+## HTTP post port conflict
+
+GL.iNet firmware may run `uhttpd` on IPv4 localhost port `8080`:
+
+```text
+127.0.0.1:8080  uhttpd
+```
+
+RIPE Atlas' keepalive SSH tunnel defaults to binding the same local port for HTTP post traffic:
+
+```text
+-L 8080:127.0.0.1:8080
+```
+
+When `uhttpd` already owns `127.0.0.1:8080`, the Atlas SSH tunnel can fail to bind IPv4 and Atlas `httppost` traffic may hit the router web UI instead of the RIPE Atlas controller tunnel.
+
+Observed symptoms:
+
+```text
+bind [127.0.0.1]:8080: Address in use
+httppost: reply text was not equal to OK
+httppost: chunk data '<html><head><title>Index of /</title>...'
+```
+
+RIPE Atlas already supports `HTTP_POST_PORT` in `/etc/ripe-atlas/config.txt`, and `/usr/sbin/ripe-atlas` exports it as `HTTPPOST_PORT`. The OpenWrt init script regenerates `config.txt` from UCI at startup, so direct edits to `config.txt` are not persistent.
+
+This repo applies a build-time patch to the RIPE Atlas OpenWrt package to add UCI option:
+
+```text
+ripe-atlas.@ripe-atlas[0].http_post_port
+```
+
+Set it to move the local bind port while preserving the controller-side destination:
+
+```sh
+uci set ripe-atlas.@ripe-atlas[0].http_post_port='8081'
+uci commit ripe-atlas
+/etc/init.d/ripe-atlas restart
+```
+
+Expected generated config:
+
+```text
+HTTP_POST_PORT=8081
+```
+
+Expected listener pattern:
+
+```text
+127.0.0.1:8080  uhttpd
+127.0.0.1:8081  ssh
+```
+
+## Traffic reporting
+
+The RIPE Atlas OpenWrt package already supports UCI option:
+
+```text
+ripe-atlas.@ripe-atlas[0].rxtx_report
+```
+
+Set it to enable interface traffic reporting:
+
+```sh
+uci set ripe-atlas.@ripe-atlas[0].rxtx_report='1'
+uci commit ripe-atlas
+/etc/init.d/ripe-atlas restart
+```
+
+Expected generated config:
+
+```text
+RXTXRPT=yes
+```
+
 ## Old GL.iNet package conflict
 
 The old package was:
@@ -126,6 +203,8 @@ atlas-sw-probe - 5040-1
 ```
 
 The new package conflicts with it. Remove `atlas-sw-probe` only after backing up keys/state and doing a dry-run.
+
+If both an old Atlas package and the new `ripe-atlas-*` packages are installed, inspect ownership and runtime state before making changes.
 
 ## Final service state
 

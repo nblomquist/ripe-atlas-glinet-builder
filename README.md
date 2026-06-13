@@ -22,10 +22,11 @@ The build script:
 2. Clones OpenWrt `v22.03.5`.
 3. Adds the RIPE Atlas software probe feed pinned to tag `5120`.
 4. Patches OpenWrt's bundled Ninja build for Python 3.13.
-5. Builds RIPE Atlas packages for `aarch64_cortex-a53`.
-6. Verifies the build does **not** depend on `libopenssl3`.
-7. Repackages `ripe-atlas-common` so the dependency is `chrony-nts` instead of `chrony`.
-8. Copies the final `.ipk` files into `dist/`.
+5. Patches the RIPE Atlas OpenWrt package so `HTTP_POST_PORT` is configurable through UCI.
+6. Builds RIPE Atlas packages for `aarch64_cortex-a53`.
+7. Verifies the build does **not** depend on `libopenssl3`.
+8. Repackages `ripe-atlas-common` so the dependency is `chrony-nts` instead of `chrony`.
+9. Copies the final `.ipk` files into `dist/`.
 
 The router installer script:
 
@@ -127,6 +128,37 @@ ssh root@192.168.8.1 'sh /tmp/router-install-ripe-atlas-5120.sh'
 
 The installer prompts before removing the old `atlas-sw-probe` package.
 
+## RIPE Atlas runtime config
+
+The RIPE Atlas OpenWrt init script regenerates `/etc/ripe-atlas/config.txt` from UCI on service start. Do not edit that generated file directly for persistent settings.
+
+This repo patches the package at build time to add a UCI option for the RIPE Atlas HTTP post local tunnel port. This is useful on GL.iNet firmware where `uhttpd` may already listen on `127.0.0.1:8080`.
+
+Recommended post-install settings:
+
+```sh
+uci set ripe-atlas.@ripe-atlas[0].http_post_port='8081'
+uci set ripe-atlas.@ripe-atlas[0].rxtx_report='1'
+uci commit ripe-atlas
+/etc/init.d/ripe-atlas restart
+```
+
+Expected generated config:
+
+```text
+RXTXRPT=yes
+HTTP_POST_PORT=8081
+```
+
+Expected listener pattern after restart:
+
+```text
+127.0.0.1:8080  uhttpd
+127.0.0.1:8081  ssh
+```
+
+If the port is not moved, Atlas may log `bind [127.0.0.1]:8080: Address in use` and `httppost` may receive GL.iNet web UI HTML instead of `OK`.
+
 ## Probe identity / public key
 
 The new RIPE Atlas package stores keys under:
@@ -170,8 +202,9 @@ Useful router checks:
 /etc/init.d/ripe-atlas status
 ubus call service list '{"name":"ripe-atlas","verbose":true}'
 opkg list-installed | grep -Ei 'ripe|atlas|chrony|openssl'
-ps w | grep -Ei '[r]ipe|[a]tlas'
+ps w | awk '/[r]ipe|[a]tlas/ { print }'
 logread | grep -Ei 'ripe|atlas|probe' | tail -200
+cat /var/run/ripe-atlas/status/ssh_err.txt
 ```
 
 ## Disclaimer

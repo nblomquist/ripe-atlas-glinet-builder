@@ -18,7 +18,7 @@ TREE_DIR="${TREE_DIR:-$BUILD_ROOT/openwrt-22-ripe}"
 DIST_DIR="${DIST_DIR:-$(pwd)/dist}"
 JOBS="${JOBS:-1}"
 ASSUME_YES="${ASSUME_YES:-0}"
-SCRIPT_DIR="$(CDPATH= cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(CDPATH=; cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 
 RIPE_FEED_LINE="src-git ripeatlas https://github.com/RIPE-NCC/ripe-atlas-software-probe.git;$RIPE_TAG"
@@ -49,7 +49,8 @@ dpkg_installed() {
 need_apt_package() {
     pkg="$1"
     if ! dpkg_installed "$pkg"; then
-        MISSING_PKGS="${MISSING_PKGS} ${pkg}"
+        MISSING_PKGS="${MISSING_PKGS}${pkg}
+"
     fi
 }
 
@@ -60,26 +61,34 @@ install_missing_packages() {
     fi
 
     section "Missing apt packages"
-    printf '%s\n' "$MISSING_PKGS"
+    printf '%s' "$MISSING_PKGS"
 
     if [ "$ASSUME_YES" != "1" ]; then
         printf '\nInstall missing packages with apt now? [y/N] '
-        read ans
+        read -r ans
         case "$ans" in
             y|Y|yes|YES) ;;
             *) fail "Missing build dependencies. Re-run with ASSUME_YES=1 to install automatically." ;;
         esac
     fi
 
+    set --
+    while IFS= read -r pkg; do
+        [ -n "$pkg" ] || continue
+        set -- "$@" "$pkg"
+    done <<EOF
+$MISSING_PKGS
+EOF
+
     if [ "$(id -u)" = "0" ]; then
         apt-get update
-        apt-get install -y $MISSING_PKGS
+        apt-get install -y "$@"
     else
         if ! have_cmd sudo; then
             fail "sudo missing. Install packages manually or run as root."
         fi
         sudo apt-get update
-        sudo apt-get install -y $MISSING_PKGS
+        sudo apt-get install -y "$@"
     fi
 }
 
@@ -225,6 +234,17 @@ section "Update/install feeds"
 ./scripts/feeds install -a
 ./scripts/feeds update ripeatlas
 ./scripts/feeds install -p ripeatlas -a
+
+section "Patch RIPE Atlas OpenWrt UCI config"
+
+if patch -d feeds/ripeatlas -p1 --forward \
+    < "$REPO_ROOT/patches/ripe-atlas-software-probe/100-openwrt-uci-http-post-port.patch"; then
+    printf 'Applied RIPE Atlas HTTP_POST_PORT UCI patch.\n'
+elif grep -q 'http_post_port:uinteger:0' feeds/ripeatlas/openwrt/files/ripe-atlas.init; then
+    printf 'RIPE Atlas HTTP_POST_PORT UCI patch already applied.\n'
+else
+    fail "Could not apply RIPE Atlas HTTP_POST_PORT UCI patch."
+fi
 
 [ -f package/feeds/ripeatlas/openwrt/Makefile ] || {
     find package/feeds/ripeatlas -maxdepth 5 -name Makefile -print 2>/dev/null || true

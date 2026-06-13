@@ -43,7 +43,15 @@ run opkg files ripe-atlas-common
 run opkg files ripe-atlas-probe
 
 section "Init scripts"
-ls -l /etc/init.d 2>/dev/null | grep -Ei 'ripe|atlas|chrony' || true
+for init_script in /etc/init.d/*; do
+    [ -e "$init_script" ] || continue
+    init_name="${init_script##*/}"
+    case "$init_name" in
+        *[Rr][Ii][Pp][Ee]*|*[Aa][Tt][Ll][Aa][Ss]*|*[Cc][Hh][Rr][Oo][Nn][Yy]*)
+            ls -l "$init_script"
+            ;;
+    esac
+done
 
 section "RIPE init status"
 if [ -x /etc/init.d/ripe-atlas ]; then
@@ -57,7 +65,7 @@ section "procd service detail"
 run ubus call service list '{"name":"ripe-atlas","verbose":true}'
 
 section "Processes"
-ps w | grep -Ei '[r]ipe|[a]tlas|[c]hrony|[c]hronyd' || true
+ps w | awk '/[r]ipe|[a]tlas|[c]hrony|[c]hronyd/ { print }' || true
 
 section "Recent logs: RIPE / Atlas / probe"
 logread 2>/dev/null | grep -Ei 'ripe|atlas|probe' | tail -250 || true

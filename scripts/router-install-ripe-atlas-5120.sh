@@ -108,7 +108,7 @@ EOF
 
 if [ "$ASSUME_YES" != "1" ]; then
     printf 'Type YES to continue: '
-    read answer
+    read -r answer
     [ "$answer" = "YES" ] || fail "Aborted before destructive changes."
 fi
 
@@ -167,7 +167,7 @@ printf '\nInit script status:\n'
 /etc/init.d/ripe-atlas status 2>&1 || true
 
 printf '\nProcesses:\n'
-ps w | grep -Ei '[r]ipe|[a]tlas' || true
+ps w | awk '/[r]ipe|[a]tlas/ { print }' || true
 
 printf '\nRecent logs:\n'
 logread | grep -Ei 'ripe|atlas|probe|error|fail|cannot|denied|not found' | tail -200 || true

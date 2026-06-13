@@ -23,6 +23,9 @@ This repository builds RIPE Atlas `.ipk` packages for GL.iNet OpenWrt-based rout
 - OpenWrt 22.03.5 produces `libopenssl1.1` dependencies, matching the tested router.
 - The GL-XE3000 is MT7981, but this repo uses OpenWrt 22.03.5 `mediatek/mt7622` only to build userspace packages for `aarch64_cortex-a53`. It must not be used to flash firmware.
 - GL.iNet firmware may have `chrony-nts` installed instead of plain `chrony`; the build repacks `ripe-atlas-common` dependency metadata accordingly.
+- GL.iNet firmware may run `uhttpd` on `127.0.0.1:8080`, which conflicts with RIPE Atlas' default local HTTP post tunnel. Symptoms include `bind [127.0.0.1]:8080: Address in use` in `ssh_err.txt` and `httppost` receiving GL.iNet web UI HTML instead of `OK`.
+- RIPE Atlas supports `HTTP_POST_PORT` in `/etc/ripe-atlas/config.txt`; this repo patches the OpenWrt package at build time to expose it as UCI option `ripe-atlas.@ripe-atlas[0].http_post_port`.
+- Traffic reporting is controlled by existing UCI option `ripe-atlas.@ripe-atlas[0].rxtx_report`; it generates `RXTXRPT=yes` in `/etc/ripe-atlas/config.txt`.
 
 ## Test commands
 
@@ -34,8 +37,8 @@ sh -n scripts/router-install-ripe-atlas-5120.sh
 sh -n scripts/router-debug-ripe-atlas.sh
 ```
 
-If available:
-
 ```sh
 shellcheck scripts/*.sh
 ```
+
+ShellCheck is expected to pass cleanly for `scripts/*.sh`.

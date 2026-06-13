@@ -65,3 +65,38 @@ opkg install \
 /etc/init.d/ripe-atlas enable
 /etc/init.d/ripe-atlas restart
 ```
+
+## Post-install config
+
+The RIPE Atlas init script regenerates `/etc/ripe-atlas/config.txt` from UCI on every start. Use UCI for persistent settings.
+
+Recommended settings on GL.iNet firmware:
+
+```sh
+uci set ripe-atlas.@ripe-atlas[0].http_post_port='8081'
+uci set ripe-atlas.@ripe-atlas[0].rxtx_report='1'
+uci commit ripe-atlas
+/etc/init.d/ripe-atlas restart
+```
+
+This should generate:
+
+```text
+RXTXRPT=yes
+HTTP_POST_PORT=8081
+```
+
+Verify the HTTP post tunnel is not colliding with `uhttpd`:
+
+```sh
+netstat -lntp | grep -E ':(8080|8081)[[:space:]]'
+cat /var/run/ripe-atlas/status/ssh_err.txt
+logread | grep -Ei 'ripe|atlas|httppost|probe' | tail -200
+```
+
+Problem indicators:
+
+```text
+bind [127.0.0.1]:8080: Address in use
+httppost: reply text was not equal to OK
+```
