@@ -1,2 +1,4 @@
 [tools]
+jq = "latest"
 shellcheck = "latest"
+ripgrep = "latest"

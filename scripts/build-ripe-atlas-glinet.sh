@@ -235,16 +235,18 @@ section "Update/install feeds"
 ./scripts/feeds update ripeatlas
 ./scripts/feeds install -p ripeatlas -a
 
-section "Patch RIPE Atlas OpenWrt UCI config"
+section "Patch RIPE Atlas OpenWrt package"
 
-if patch -d feeds/ripeatlas -p1 --forward \
-    < "$REPO_ROOT/patches/ripe-atlas-software-probe/100-openwrt-uci-http-post-port.patch"; then
-    printf 'Applied RIPE Atlas HTTP_POST_PORT UCI patch.\n'
-elif grep -q 'http_post_port:uinteger:0' feeds/ripeatlas/openwrt/files/ripe-atlas.init; then
-    printf 'RIPE Atlas HTTP_POST_PORT UCI patch already applied.\n'
-else
-    fail "Could not apply RIPE Atlas HTTP_POST_PORT UCI patch."
-fi
+for patch_file in "$REPO_ROOT"/patches/ripe-atlas-software-probe/*.patch; do
+    patch_name="${patch_file##*/}"
+    if patch -d feeds/ripeatlas -p1 --forward < "$patch_file"; then
+        printf 'Applied RIPE Atlas patch: %s\n' "$patch_name"
+    elif patch -d feeds/ripeatlas -p1 --reverse --dry-run < "$patch_file" >/dev/null 2>&1; then
+        printf 'RIPE Atlas patch already applied: %s\n' "$patch_name"
+    else
+        fail "Could not apply RIPE Atlas patch: $patch_name"
+    fi
+done
 
 [ -f package/feeds/ripeatlas/openwrt/Makefile ] || {
     find package/feeds/ripeatlas -maxdepth 5 -name Makefile -print 2>/dev/null || true

@@ -1,0 +1,53 @@
+diff --git a/bin/arch/linux/linux-functions.sh b/bin/arch/linux/linux-functions.sh
+index 1c25a83..890f761 100755
+--- a/bin/arch/linux/linux-functions.sh
++++ b/bin/arch/linux/linux-functions.sh
+@@ -120,9 +120,13 @@ kill_perds()
+ }
+ kill_telnetd()
+ {
+-	if [ -f $STATUS_DIR/telnetd-port$TELNETD_PORT-pid.vol ] ; then
+-		kill -9 `tail -1 $STATUS_DIR/telnetd-port$TELNETD_PORT-pid.vol` 2>/dev/null
+-	fi
++	for pid_file in \
++		$RUN_DIR/telnetd-port$TELNETD_PORT-pid.vol \
++		$STATUS_DIR/telnetd-port$TELNETD_PORT-pid.vol
++	do
++		[ -f $pid_file ] || continue
++		kill -9 `tail -1 $pid_file` 2>/dev/null
++	done
+ }
+ sos()
+ {
+diff --git a/openwrt/files/ripe-atlas.init b/openwrt/files/ripe-atlas.init
+index 770087f..4a0384a 100755
+--- a/openwrt/files/ripe-atlas.init
++++ b/openwrt/files/ripe-atlas.init
+@@ -142,6 +142,14 @@ stop_service()
+ 	local pids
+ 	local pid
+ 
++	for pid_file in \
++		${IPKG_INSTROOT}/var/run/ripe-atlas/pids/telnetd-port*-pid.vol \
++		${IPKG_INSTROOT}/var/run/ripe-atlas/status/telnetd-port*-pid.vol
++	do
++		[ -f "${pid_file}" ] || continue
++		pid="$(tail -1 "${pid_file}")"
++		[ -n "${pid}" ] && kill "${pid}" 1>/dev/null 2>&1
++	done
+ 	for pid in $(find /proc -type d -maxdepth 1 -group ${GROUP} -print); do
+ 		pids="${pid##*/} ${pids}"
+ 	done
+diff --git a/openwrt/files/ripe-atlas.uci-defaults b/openwrt/files/ripe-atlas.uci-defaults
+index 99fd2ae..3c0f8d4 100755
+--- a/openwrt/files/ripe-atlas.uci-defaults
++++ b/openwrt/files/ripe-atlas.uci-defaults
+@@ -1,6 +1,6 @@
+ #!/bin/sh
+-chown ripe-atlas-measurement:ripe-atlas ${IPKG_INSTROOT}/usr/lib/ripe-atlas/measurement/busybox 1>/dev/null 2>&1
+-chmod 0750 ${IPKG_INSTROOT}/usr/lib/ripe-atlas/measurement/busybox 1>/dev/null 2>&1
++chown root:ripe-atlas ${IPKG_INSTROOT}/usr/lib/ripe-atlas/measurement/busybox 1>/dev/null 2>&1
++chmod 4750 ${IPKG_INSTROOT}/usr/lib/ripe-atlas/measurement/busybox 1>/dev/null 2>&1
+ chown 0:0 ${IPKG_INSTROOT}/usr/share/ripe-atlas/measurement.conf 1>/dev/null 2>&1
+ chmod 0644 ${IPKG_INSTROOT}/usr/share/ripe-atlas/measurement.conf 1>/dev/null 2>&1
+ uci get ripe-atlas 1>/dev/null 2>&1

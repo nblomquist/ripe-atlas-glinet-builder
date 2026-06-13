@@ -172,6 +172,42 @@ Expected listener pattern:
 127.0.0.1:8081  ssh
 ```
 
+## Local telnetd port 2023
+
+RIPE Atlas starts a local `telnetd` and asks the controller SSH keepalive to reverse-forward to it:
+
+```text
+telnetd -b 127.0.0.1 -p 2023
+ssh -R 2023:127.0.0.1:2023 ... KEEP
+```
+
+Observed failure after installing the generic OpenWrt package on GL.iNet firmware:
+
+```text
+connect_to 127.0.0.1 port 2023: failed.
+```
+
+Runtime investigation showed the service running as `ripe-atlas`, while the packaged BusyBox `telnetd` needs setuid-root behavior for this applet. Running the applet as `ripe-atlas` failed with:
+
+```text
+telnetd: setresuid: Operation not permitted
+```
+
+The repo patches the OpenWrt package to install `/usr/lib/ripe-atlas/measurement/busybox` as `root:ripe-atlas` mode `4750`, allowing the `ripe-atlas` service user to start the Atlas applets with the required setuid behavior without making them world-executable.
+
+The repo also patches telnetd cleanup to use the PID file path where `/usr/sbin/ripe-atlas` writes it:
+
+```text
+/var/run/ripe-atlas/pids/telnetd-port2023-pid.vol
+```
+
+Expected listener pattern:
+
+```text
+127.0.0.1:2023  telnetd
+127.0.0.1:8081  ssh
+```
+
 ## Traffic reporting
 
 The RIPE Atlas OpenWrt package already supports UCI option:

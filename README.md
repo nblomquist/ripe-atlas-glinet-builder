@@ -153,11 +153,14 @@ HTTP_POST_PORT=8081
 Expected listener pattern after restart:
 
 ```text
+127.0.0.1:2023  telnetd
 127.0.0.1:8080  uhttpd
 127.0.0.1:8081  ssh
 ```
 
 If the port is not moved, Atlas may log `bind [127.0.0.1]:8080: Address in use` and `httppost` may receive GL.iNet web UI HTML instead of `OK`.
+
+If `telnetd` is not listening on `127.0.0.1:2023`, the controller SSH keepalive may log `connect_to 127.0.0.1 port 2023: failed` in `/var/run/ripe-atlas/status/ssh_err.txt`.
 
 ## Probe identity / public key
 
