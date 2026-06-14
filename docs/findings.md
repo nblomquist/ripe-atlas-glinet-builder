@@ -208,6 +208,34 @@ Expected listener pattern:
 127.0.0.1:8081  ssh
 ```
 
+## IPv4/IPv6 ICMP measurements
+
+RIPE Atlas may tag the probe as IPv4/IPv6 capable while also reporting IPv4/IPv6 does not work. On the tested GL.iNet firmware, the router itself had working IPv4 and IPv6 routes, and Atlas DNS/HTTP measurements succeeded over both address families. Atlas ICMP measurements failed instead:
+
+```text
+"proto":"ICMP", "error":"socket failed: Operation not permitted"
+```
+
+Manual router checks confirmed network connectivity:
+
+```text
+ping -4 1.1.1.1                 OK
+ping -6 2606:4700:4700::1111    OK
+```
+
+The failure was the Atlas measurement process lacking raw-socket privileges. The generic OpenWrt package ships a capabilities file for `ujail`, but this GL.iNet firmware did not have `/sbin/ujail` or `setcap`, so `CAP_NET_RAW` was not applied.
+
+The repo patches `measurement.conf` so only raw-socket-capable applets run with root effective privileges while remaining executable only by the `ripe-atlas` group:
+
+```text
+eooqd        = ssx root.ripe-atlas
+eperd        = ssx root.ripe-atlas
+evping       = ssx root.ripe-atlas
+evtraceroute = ssx root.ripe-atlas
+```
+
+After applying the runtime equivalent and restarting, Atlas `evping` worked as the `ripe-atlas` service user for both IPv4 and IPv6.
+
 ## Traffic reporting
 
 The RIPE Atlas OpenWrt package already supports UCI option:

@@ -162,6 +162,8 @@ If the port is not moved, Atlas may log `bind [127.0.0.1]:8080: Address in use` 
 
 If `telnetd` is not listening on `127.0.0.1:2023`, the controller SSH keepalive may log `connect_to 127.0.0.1 port 2023: failed` in `/var/run/ripe-atlas/status/ssh_err.txt`.
 
+If RIPE Atlas reports IPv4/IPv6 as capable but not working, check `/var/spool/ripe-atlas/data/new/7` for ICMP results with `socket failed: Operation not permitted`. That indicates Atlas raw-socket measurement privileges, not basic router connectivity.
+
 ## Probe identity / public key
 
 The new RIPE Atlas package stores keys under:

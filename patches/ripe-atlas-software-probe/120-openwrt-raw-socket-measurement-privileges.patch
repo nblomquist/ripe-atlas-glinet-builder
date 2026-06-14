@@ -1,0 +1,20 @@
+diff --git a/config/common/measurement.conf.in b/config/common/measurement.conf.in
+index 7c30ea1..7f4a50a 100644
+--- a/config/common/measurement.conf.in
++++ b/config/common/measurement.conf.in
+@@ -1,12 +1,12 @@
+ [SUID]
+-eooqd        = ssx @ripe_atlas_measurement@.@ripe_atlas_group@
+-eperd        = ssx @ripe_atlas_measurement@.@ripe_atlas_group@
++eooqd        = ssx root.@ripe_atlas_group@
++eperd        = ssx root.@ripe_atlas_group@
+ evhttpget    = ssx @ripe_atlas_measurement@.@ripe_atlas_group@
+ evntp        = ssx @ripe_atlas_measurement@.@ripe_atlas_group@
+-evping       = ssx @ripe_atlas_measurement@.@ripe_atlas_group@
++evping       = ssx root.@ripe_atlas_group@
+ evsslgetcert = ssx @ripe_atlas_measurement@.@ripe_atlas_group@
+ evtdig       = ssx @ripe_atlas_measurement@.@ripe_atlas_group@
+-evtraceroute = ssx @ripe_atlas_measurement@.@ripe_atlas_group@
++evtraceroute = ssx root.@ripe_atlas_group@
+ perd         = ssx @ripe_atlas_measurement@.@ripe_atlas_group@
+ telnetd      = ssx @ripe_atlas_measurement@.@ripe_atlas_group@
