@@ -10,9 +10,11 @@ The initial validated target is:
 - Firmware family: GL.iNet 4.x, OpenWrt 21.02-SNAPSHOT-derived
 - Router package architecture: `aarch64_cortex-a53`
 - Router OpenSSL generation: `libopenssl1.1`
-- RIPE Atlas release: `5120`
+- RIPE Atlas release: `5130`
 
-This repository contains scripts and notes from building RIPE Atlas 5120 for a GL-XE3000 where the vendor feed still exposed an older Atlas probe package.
+This repository contains scripts and notes for building RIPE Atlas 5130 for a GL-XE3000 where the vendor feed still exposes an older Atlas probe package. See the [5130 build findings](docs/findings-5130.md); the original 5120 router validation remains in the [historical findings](docs/findings.md).
+
+RIPE Atlas 5130 fixes incorrect NTP clock offsets reported by 5120. Upstream states that 5120 round-trip-time values are unaffected, but its NTP offset values should not be used.
 
 ## What this repo does
 
@@ -20,9 +22,9 @@ The build script:
 
 1. Checks Debian 13 build dependencies.
 2. Clones OpenWrt `v22.03.5`.
-3. Adds the RIPE Atlas software probe feed pinned to tag `5120`.
+3. Adds the RIPE Atlas software probe feed pinned to tag `5130` and verifies its immutable commit.
 4. Patches OpenWrt's bundled Ninja build for Python 3.13.
-5. Patches the RIPE Atlas OpenWrt package so `HTTP_POST_PORT` is configurable through UCI.
+5. Patches the RIPE Atlas OpenWrt package so `HTTP_POST_PORT` is configurable through UCI without discarding unrelated runtime settings.
 6. Builds RIPE Atlas packages for `aarch64_cortex-a53`.
 7. Verifies the build does **not** depend on `libopenssl3`.
 8. Repackages `ripe-atlas-common` so the dependency is `chrony-nts` instead of `chrony`.
@@ -32,11 +34,12 @@ The router installer script:
 
 1. Checks that the expected `.ipk` files are present in `/tmp`.
 2. Backs up existing RIPE Atlas state and keys.
-3. Installs harmless prerequisites such as `openssh-keygen` and `bzip2`.
-4. Uses `opkg --noaction` before making changes.
-5. Removes the old GL.iNet `atlas-sw-probe` package if present.
-6. Installs `ripe-atlas-common` and `ripe-atlas-probe`.
-7. Enables/restarts `/etc/init.d/ripe-atlas`.
+3. Checks the fixed 5130 account IDs for unrelated router users or groups.
+4. Uses `opkg --noaction` before removing or installing packages.
+5. Refuses legacy `atlas-sw-probe` migration because its conflict prevents a conclusive pre-removal dry-run, while upgrading existing `ripe-atlas-*` packages in place.
+6. Removes the generated 5120 registration-server cache so the new Ed25519 registration hosts are selected.
+7. Installs `ripe-atlas-common` and `ripe-atlas-probe` with their declared prerequisites while verifying that an existing probe private key is unchanged.
+8. Enables/restarts `/etc/init.d/ripe-atlas` and verifies the regenerated registration-server cache.
 
 ## Why OpenWrt 22.03.5?
 
@@ -86,8 +89,8 @@ dist/
 Expected final packages:
 
 ```text
-dist/ripe-atlas-common_5120-1_chrony-nts_aarch64_cortex-a53.ipk
-dist/ripe-atlas-probe_5120-1_aarch64_cortex-a53.ipk
+dist/ripe-atlas-common_5130-1_chrony-nts_aarch64_cortex-a53.ipk
+dist/ripe-atlas-probe_5130-1_aarch64_cortex-a53.ipk
 ```
 
 ## Copy packages to the router
@@ -96,19 +99,19 @@ OpenWrt/GL.iNet often lacks an SFTP server, so use legacy SCP mode:
 
 ```sh
 scp -O \
-  dist/ripe-atlas-common_5120-1_chrony-nts_aarch64_cortex-a53.ipk \
-  dist/ripe-atlas-probe_5120-1_aarch64_cortex-a53.ipk \
+  dist/ripe-atlas-common_5130-1_chrony-nts_aarch64_cortex-a53.ipk \
+  dist/ripe-atlas-probe_5130-1_aarch64_cortex-a53.ipk \
   root@192.168.8.1:/tmp/
 ```
 
 If `scp -O` does not work, use `cat` over SSH:
 
 ```sh
-cat dist/ripe-atlas-common_5120-1_chrony-nts_aarch64_cortex-a53.ipk \
-  | ssh root@192.168.8.1 'cat > /tmp/ripe-atlas-common_5120-1_chrony-nts_aarch64_cortex-a53.ipk'
+cat dist/ripe-atlas-common_5130-1_chrony-nts_aarch64_cortex-a53.ipk \
+  | ssh root@192.168.8.1 'cat > /tmp/ripe-atlas-common_5130-1_chrony-nts_aarch64_cortex-a53.ipk'
 
-cat dist/ripe-atlas-probe_5120-1_aarch64_cortex-a53.ipk \
-  | ssh root@192.168.8.1 'cat > /tmp/ripe-atlas-probe_5120-1_aarch64_cortex-a53.ipk'
+cat dist/ripe-atlas-probe_5130-1_aarch64_cortex-a53.ipk \
+  | ssh root@192.168.8.1 'cat > /tmp/ripe-atlas-probe_5130-1_aarch64_cortex-a53.ipk'
 ```
 
 ## Install on the router
@@ -116,21 +119,21 @@ cat dist/ripe-atlas-probe_5120-1_aarch64_cortex-a53.ipk \
 After copying the packages to `/tmp` on the router:
 
 ```sh
-sh /tmp/router-install-ripe-atlas-5120.sh
+sh /tmp/router-install-ripe-atlas.sh
 ```
 
 Or copy the installer first:
 
 ```sh
-scp -O scripts/router-install-ripe-atlas-5120.sh root@192.168.8.1:/tmp/
-ssh root@192.168.8.1 'sh /tmp/router-install-ripe-atlas-5120.sh'
+scp -O scripts/router-install-ripe-atlas.sh root@192.168.8.1:/tmp/
+ssh root@192.168.8.1 'sh /tmp/router-install-ripe-atlas.sh'
 ```
 
-The installer prompts before removing the old `atlas-sw-probe` package.
+The installer refuses to remove the old `atlas-sw-probe` package because `opkg` cannot complete dependency checks past that conflict. It prompts before removing the generated registration-server cache. An existing 5120 installation is upgraded in place; its private key is checksummed before and after installation.
 
 ## RIPE Atlas runtime config
 
-The RIPE Atlas OpenWrt init script regenerates `/etc/ripe-atlas/config.txt` from UCI on service start. Do not edit that generated file directly for persistent settings.
+The patched RIPE Atlas OpenWrt init script synchronizes its managed `RXTXRPT` and `HTTP_POST_PORT` entries from UCI when they change. Other entries in `/etc/ripe-atlas/config.txt` are preserved.
 
 This repo patches the package at build time to add a UCI option for the RIPE Atlas HTTP post local tunnel port. This is useful on GL.iNet firmware where `uhttpd` may already listen on `127.0.0.1:8080`.
 

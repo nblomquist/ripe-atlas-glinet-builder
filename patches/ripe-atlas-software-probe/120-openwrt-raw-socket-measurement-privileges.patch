@@ -1,8 +1,7 @@
 diff --git a/config/common/measurement.conf.in b/config/common/measurement.conf.in
-index 7c30ea1..7f4a50a 100644
 --- a/config/common/measurement.conf.in
 +++ b/config/common/measurement.conf.in
-@@ -1,12 +1,12 @@
+@@ -1,11 +1,11 @@
  [SUID]
 -eooqd        = ssx @ripe_atlas_measurement@.@ripe_atlas_group@
 -eperd        = ssx @ripe_atlas_measurement@.@ripe_atlas_group@

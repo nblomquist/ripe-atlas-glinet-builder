@@ -42,6 +42,18 @@ section "RIPE package files"
 run opkg files ripe-atlas-common
 run opkg files ripe-atlas-probe
 
+section "RIPE account IDs"
+awk -F: '$1 == "ripe-atlas" || $1 == "ripe-atlas-measurement" || $3 == 3333 || $3 == 3334 { print FILENAME ":" $0 }' /etc/passwd /etc/group 2>/dev/null || true
+
+section "RIPE configuration and registration servers"
+run uci show ripe-atlas
+run cat /etc/ripe-atlas/mode
+run cat /etc/ripe-atlas/config.txt
+run cat /etc/ripe-atlas/reg_servers.sh
+run cat /usr/share/ripe-atlas/known_hosts.reg
+run ls -l /usr/lib/ripe-atlas/measurement/busybox
+run cat /usr/share/ripe-atlas/measurement.conf
+
 section "Init scripts"
 for init_script in /etc/init.d/*; do
     [ -e "$init_script" ] || continue
@@ -72,6 +84,9 @@ logread 2>/dev/null | grep -Ei 'ripe|atlas|probe' | tail -250 || true
 
 section "Recent logs: errors/warnings"
 logread 2>/dev/null | grep -Ei 'ripe|atlas|probe|error|failed|fail|cannot|missing|permission|denied|not found|segfault|crash' | tail -300 || true
+
+section "Controller SSH status"
+run cat /var/run/ripe-atlas/status/ssh_err.txt
 
 section "Chrony"
 if [ -x /etc/init.d/chronyd ]; then

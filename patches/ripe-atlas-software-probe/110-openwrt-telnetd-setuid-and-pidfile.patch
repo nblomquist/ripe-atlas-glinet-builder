@@ -1,8 +1,7 @@
 diff --git a/bin/arch/linux/linux-functions.sh b/bin/arch/linux/linux-functions.sh
-index 1c25a83..890f761 100755
 --- a/bin/arch/linux/linux-functions.sh
 +++ b/bin/arch/linux/linux-functions.sh
-@@ -120,9 +120,13 @@ kill_perds()
+@@ -120,9 +120,19 @@ kill_perds()
  }
  kill_telnetd()
  {
@@ -14,32 +13,44 @@ index 1c25a83..890f761 100755
 +		$STATUS_DIR/telnetd-port$TELNETD_PORT-pid.vol
 +	do
 +		[ -f $pid_file ] || continue
-+		kill -9 `tail -1 $pid_file` 2>/dev/null
++		pid=`tail -1 $pid_file`
++		case "$pid" in
++		''|*[!0-9]*) continue ;;
++		esac
++		[ "$(cat /proc/$pid/comm 2>/dev/null)" = 'telnetd' ] || continue
++		[ "$(readlink /proc/$pid/exe 2>/dev/null)" = "$ATLAS_MEASUREMENT/busybox" ] || continue
++		kill -9 $pid 2>/dev/null
 +	done
  }
- sos()
+ get_sos_server()
  {
 diff --git a/openwrt/files/ripe-atlas.init b/openwrt/files/ripe-atlas.init
-index 770087f..4a0384a 100755
 --- a/openwrt/files/ripe-atlas.init
 +++ b/openwrt/files/ripe-atlas.init
-@@ -142,6 +142,14 @@ stop_service()
+@@ -192,7 +192,21 @@ stop_service()
+ {
  	local pids
  	local pid
- 
+-
++	local pid_file
++
 +	for pid_file in \
 +		${IPKG_INSTROOT}/var/run/ripe-atlas/pids/telnetd-port*-pid.vol \
 +		${IPKG_INSTROOT}/var/run/ripe-atlas/status/telnetd-port*-pid.vol
 +	do
 +		[ -f "${pid_file}" ] || continue
 +		pid="$(tail -1 "${pid_file}")"
-+		[ -n "${pid}" ] && kill "${pid}" 1>/dev/null 2>&1
++		case "${pid}" in
++		''|*[!0-9]*) continue ;;
++		esac
++		[ "$(cat "/proc/${pid}/comm" 2>/dev/null)" = 'telnetd' ] || continue
++		[ "$(readlink "/proc/${pid}/exe" 2>/dev/null)" = "${IPKG_INSTROOT}/usr/lib/ripe-atlas/measurement/busybox" ] || continue
++		kill "${pid}" 1>/dev/null 2>&1
 +	done
  	for pid in $(find /proc -type d -maxdepth 1 -group ${GROUP} -print); do
  		pids="${pid##*/} ${pids}"
  	done
 diff --git a/openwrt/files/ripe-atlas.uci-defaults b/openwrt/files/ripe-atlas.uci-defaults
-index 99fd2ae..3c0f8d4 100755
 --- a/openwrt/files/ripe-atlas.uci-defaults
 +++ b/openwrt/files/ripe-atlas.uci-defaults
 @@ -1,6 +1,6 @@

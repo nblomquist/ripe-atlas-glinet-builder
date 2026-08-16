@@ -1,5 +1,5 @@
 #!/bin/sh
-# Build RIPE Atlas 5120 OpenWrt packages for GL.iNet routers.
+# Build RIPE Atlas OpenWrt packages for GL.iNet routers.
 #
 # Validated target:
 #   GL.iNet GL-XE3000 / Puli AX
@@ -12,7 +12,9 @@
 set -eu
 
 OPENWRT_VERSION="${OPENWRT_VERSION:-v22.03.5}"
-RIPE_TAG="${RIPE_TAG:-5120}"
+RIPE_TAG="${RIPE_TAG:-5130}"
+RIPE_COMMIT="${RIPE_COMMIT:-9eba070abb1db98890b45e5e531765ac8a11ed97}"
+PACKAGE_ARCH="${PACKAGE_ARCH:-aarch64_cortex-a53}"
 BUILD_ROOT="${BUILD_ROOT:-$(pwd)/.build}"
 TREE_DIR="${TREE_DIR:-$BUILD_ROOT/openwrt-22-ripe}"
 DIST_DIR="${DIST_DIR:-$(pwd)/dist}"
@@ -216,9 +218,7 @@ else
     : > feeds.conf
 fi
 
-if ! grep -q 'RIPE-NCC/ripe-atlas-software-probe' feeds.conf; then
-    printf '%s\n' "$RIPE_FEED_LINE" >> feeds.conf
-fi
+printf '%s\n' "$RIPE_FEED_LINE" >> feeds.conf
 
 grep 'RIPE-NCC/ripe-atlas-software-probe' feeds.conf
 
@@ -230,10 +230,18 @@ cp "$REPO_ROOT/patches/openwrt-22.03.5/ninja/101-python313-shlex-instead-of-pipe
 
 section "Update/install feeds"
 
+rm -rf feeds/ripeatlas feeds/ripeatlas.index
 ./scripts/feeds update -a
 ./scripts/feeds install -a
-./scripts/feeds update ripeatlas
 ./scripts/feeds install -p ripeatlas -a
+
+RIPE_SOURCE_VERSION="$(tr -d '\r\n' < feeds/ripeatlas/VERSION)"
+RIPE_SOURCE_COMMIT="$(git -C feeds/ripeatlas rev-parse HEAD)"
+printf 'RIPE Atlas source version: %s\n' "$RIPE_SOURCE_VERSION"
+printf 'RIPE Atlas source commit: %s\n' "$RIPE_SOURCE_COMMIT"
+[ "$RIPE_SOURCE_VERSION" = "$RIPE_TAG" ] || fail "RIPE feed version does not match tag $RIPE_TAG."
+[ "$RIPE_SOURCE_COMMIT" = "$RIPE_COMMIT" ] || fail "RIPE tag $RIPE_TAG did not resolve to expected commit $RIPE_COMMIT."
+[ -z "$(git -C feeds/ripeatlas status --short)" ] || fail "RIPE feed is dirty before downstream patches."
 
 section "Patch RIPE Atlas OpenWrt package"
 
@@ -247,6 +255,17 @@ for patch_file in "$REPO_ROOT"/patches/ripe-atlas-software-probe/*.patch; do
         fail "Could not apply RIPE Atlas patch: $patch_name"
     fi
 done
+
+RIPE_CHANGED_FILES="$(git -C feeds/ripeatlas diff --name-only | sort)"
+EXPECTED_RIPE_CHANGED_FILES="bin/arch/linux/linux-functions.sh
+config/common/measurement.conf.in
+openwrt/files/ripe-atlas.init
+openwrt/files/ripe-atlas.uci-defaults"
+[ "$RIPE_CHANGED_FILES" = "$EXPECTED_RIPE_CHANGED_FILES" ] || {
+    printf 'Unexpected RIPE source changes:\n%s\n' "$RIPE_CHANGED_FILES" >&2
+    fail "RIPE source differs from the pinned commit beyond the expected downstream patches."
+}
+git -C feeds/ripeatlas diff --check
 
 [ -f package/feeds/ripeatlas/openwrt/Makefile ] || {
     find package/feeds/ripeatlas -maxdepth 5 -name Makefile -print 2>/dev/null || true
@@ -262,7 +281,17 @@ make defconfig
 ARCH_PACKAGES="$(grep '^CONFIG_TARGET_ARCH_PACKAGES=' .config | cut -d '"' -f 2 || true)"
 printf 'CONFIG_TARGET_ARCH_PACKAGES=%s\n' "$ARCH_PACKAGES"
 
-[ "$ARCH_PACKAGES" = "aarch64_cortex-a53" ] || fail "Expected aarch64_cortex-a53 package architecture."
+[ "$ARCH_PACKAGES" = "$PACKAGE_ARCH" ] || fail "Expected $PACKAGE_ARCH package architecture."
+grep -q '^CONFIG_PACKAGE_ripe-atlas-common=m$' .config || fail "ripe-atlas-common is not selected as a module."
+grep -q '^CONFIG_PACKAGE_ripe-atlas-probe=m$' .config || fail "ripe-atlas-probe is not selected as a module."
+if grep -Eq '^CONFIG_PACKAGE_ripe-atlas-(anchor|hwprobe)=[ym]$' .config; then
+    fail "Only the RIPE Atlas software probe packages may be selected."
+fi
+if grep -q '^CONFIG_BUSYBOX_CUSTOM=y$' .config; then
+    grep -q '^CONFIG_BUSYBOX_CONFIG_TEE=y$' .config || fail "RIPE Atlas 5130 requires BusyBox tee support."
+else
+    grep -q '^CONFIG_BUSYBOX_DEFAULT_TEE=y$' .config || fail "The default BusyBox configuration does not include tee."
+fi
 
 section "Build tools"
 
@@ -278,10 +307,19 @@ make -j"$JOBS" package/feeds/ripeatlas/openwrt/compile V=s
 
 section "Find output packages"
 
-PKG_DIR="bin/packages/aarch64_cortex-a53/ripeatlas"
-COMMON_ORIG="$PKG_DIR/ripe-atlas-common_5120-1_aarch64_cortex-a53.ipk"
-PROBE_ORIG="$PKG_DIR/ripe-atlas-probe_5120-1_aarch64_cortex-a53.ipk"
-COMMON_REPACK="$PKG_DIR/ripe-atlas-common_5120-1_chrony-nts_aarch64_cortex-a53.ipk"
+RIPE_PACKAGE_RELEASE="$(sed -n 's/^PKG_RELEASE:=[[:space:]]*//p' feeds/ripeatlas/openwrt/Makefile)"
+case "$RIPE_PACKAGE_RELEASE" in
+    ''|*[!0-9]*) fail "Unexpected RIPE package release: $RIPE_PACKAGE_RELEASE" ;;
+esac
+
+PKG_DIR="bin/packages/$PACKAGE_ARCH/ripeatlas"
+PACKAGE_SUFFIX="${RIPE_SOURCE_VERSION}-${RIPE_PACKAGE_RELEASE}_${PACKAGE_ARCH}.ipk"
+COMMON_NAME="ripe-atlas-common_${PACKAGE_SUFFIX}"
+PROBE_NAME="ripe-atlas-probe_${PACKAGE_SUFFIX}"
+COMMON_REPACK_NAME="ripe-atlas-common_${RIPE_SOURCE_VERSION}-${RIPE_PACKAGE_RELEASE}_chrony-nts_${PACKAGE_ARCH}.ipk"
+COMMON_ORIG="$PKG_DIR/$COMMON_NAME"
+PROBE_ORIG="$PKG_DIR/$PROBE_NAME"
+COMMON_REPACK="$PKG_DIR/$COMMON_REPACK_NAME"
 
 find bin -type f -name '*ripe*atlas*.ipk' -print
 
@@ -303,7 +341,23 @@ fi
 if show_control "$COMMON_ORIG" | grep -q 'libopenssl1.1'; then
     printf 'OpenSSL dependency: libopenssl1.1 ok\n'
 else
-    printf 'WARNING: libopenssl1.1 not found in dependency metadata.\n' >&2
+    fail "libopenssl1.1 not found in dependency metadata."
+fi
+
+[ "$(show_control "$COMMON_ORIG" | sed -n 's/^Version: //p')" = "${RIPE_SOURCE_VERSION}-${RIPE_PACKAGE_RELEASE}" ] || {
+    fail "Unexpected ripe-atlas-common version metadata."
+}
+[ "$(show_control "$PROBE_ORIG" | sed -n 's/^Version: //p')" = "${RIPE_SOURCE_VERSION}-${RIPE_PACKAGE_RELEASE}" ] || {
+    fail "Unexpected ripe-atlas-probe version metadata."
+}
+[ "$(show_control "$COMMON_ORIG" | sed -n 's/^Architecture: //p')" = "$PACKAGE_ARCH" ] || {
+    fail "Unexpected ripe-atlas-common architecture metadata."
+}
+[ "$(show_control "$PROBE_ORIG" | sed -n 's/^Architecture: //p')" = "$PACKAGE_ARCH" ] || {
+    fail "Unexpected ripe-atlas-probe architecture metadata."
+}
+if show_control "$COMMON_ORIG" | grep '^Depends:' | grep -q 'e2fsprogs'; then
+    fail "RIPE Atlas 5130 should no longer depend on e2fsprogs."
 fi
 
 section "Repack ripe-atlas-common: chrony -> chrony-nts"
@@ -405,8 +459,8 @@ cp "$COMMON_REPACK" "$DIST_DIR/"
 cp "$PROBE_ORIG" "$DIST_DIR/"
 
 printf 'Final package files:\n'
-ls -lh "$DIST_DIR"/ripe-atlas-common_5120-1_chrony-nts_aarch64_cortex-a53.ipk \
-       "$DIST_DIR"/ripe-atlas-probe_5120-1_aarch64_cortex-a53.ipk
+ls -lh "$DIST_DIR/$COMMON_REPACK_NAME" \
+       "$DIST_DIR/$PROBE_NAME"
 
 section "Final metadata"
 
@@ -424,12 +478,12 @@ Build complete.
 Copy to router:
 
   scp -O \\
-    "$DIST_DIR/ripe-atlas-common_5120-1_chrony-nts_aarch64_cortex-a53.ipk" \\
-    "$DIST_DIR/ripe-atlas-probe_5120-1_aarch64_cortex-a53.ipk" \\
+    "$DIST_DIR/$COMMON_REPACK_NAME" \\
+    "$DIST_DIR/$PROBE_NAME" \\
     root@192.168.8.1:/tmp/
 
 Then run the router installer from this repository:
 
-  scp -O scripts/router-install-ripe-atlas-5120.sh root@192.168.8.1:/tmp/
-  ssh root@192.168.8.1 'sh /tmp/router-install-ripe-atlas-5120.sh'
+  scp -O scripts/router-install-ripe-atlas.sh root@192.168.8.1:/tmp/
+  ssh root@192.168.8.1 'sh /tmp/router-install-ripe-atlas.sh'
 EOF

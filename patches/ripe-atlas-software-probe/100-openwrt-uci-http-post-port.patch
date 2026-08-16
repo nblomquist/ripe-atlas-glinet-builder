@@ -1,5 +1,4 @@
 diff --git a/openwrt/files/ripe-atlas.init b/openwrt/files/ripe-atlas.init
-index 3075844..5010966 100755
 --- a/openwrt/files/ripe-atlas.init
 +++ b/openwrt/files/ripe-atlas.init
 @@ -12,7 +12,8 @@ validate_config()
@@ -12,18 +11,90 @@ index 3075844..5010966 100755
  }
  
  create_dir()
-@@ -106,6 +107,9 @@ start_instance()
- 	if [ ${rxtx_report} -ne 0 ]; then
- 		echo 'RXTXRPT=yes' >> "${cfg}"
- 	fi
-+	if [ ${http_post_port} -ne 0 ]; then
-+		echo "HTTP_POST_PORT=${http_post_port}" >> "${cfg}"
-+	fi
- 	echo "${mode}" > "${mod}"
+@@ -80,6 +81,10 @@ start_instance()
+ 	local cfg=${IPKG_INSTROOT}/etc/ripe-atlas/config.txt
+ 	local mod=${IPKG_INSTROOT}/etc/ripe-atlas/mode
+ 	local oldmode
++	local config_changed=0
++	local config_tmp
++	local current_rxtx
++	local current_http_post_port
  
- 	procd_open_instance
+ 	if [ ${2} -ne 0 ]; then
+ 		echo 'validation failed'
+@@ -98,6 +103,11 @@ start_instance()
+ 			;;
+ 	esac
+ 
++	if [ ${http_post_port} -gt 65535 ]; then
++		echo 'HTTP post port must be between 0 and 65535'
++		return 1
++	fi
++
+ 	echo 'Starting RIPE Atlas'
+ 	setup_environment
+ 
+@@ -107,16 +117,52 @@ start_instance()
+ 		rm -f ${IPKG_INSTROOT}/etc/ripe-atlas/reg_servers.sh
+ 	fi
+ 
+-	if [ -f "${cfg}" ]; then
+-		. "${cfg}"
++	if [ -e "${cfg}" ] && [ ! -r "${cfg}" ]; then
++		echo 'RIPE Atlas config is not readable'
++		return 1
++	fi
++	current_rxtx=$(sed -n 's/^[[:space:]]*RXTXRPT=//p' "${cfg}" 2>/dev/null)
++	current_http_post_port=$(sed -n 's/^[[:space:]]*HTTP_POST_PORT=//p' "${cfg}" 2>/dev/null)
++
++	if ( [ ${rxtx_report} -ne 0 ] && [ "${current_rxtx}" != 'yes' ] ) ||
++	   ( [ ${rxtx_report} -eq 0 ] && [ -n "${current_rxtx}" ] ); then
++		config_changed=1
++	fi
++	if ( [ ${http_post_port} -ne 0 ] && [ "${current_http_post_port}" != "${http_post_port}" ] ) ||
++	   ( [ ${http_post_port} -eq 0 ] && [ -n "${current_http_post_port}" ] ); then
++		config_changed=1
+ 	fi
+ 
+-	if ( ( [ ${rxtx_report} -ne 0 ] && [ "${RXTXRPT}" != 'yes' ] ) ||
+-	     ( [ ${rxtx_report} -eq 0 ] && [ "${RXTXRPT}" = 'yes' ] ) ); then
+-		if [ ${rxtx_report} -ne 0 ]; then
+-			echo 'RXTXRPT=yes' > "${cfg}"
++	if [ ${config_changed} -ne 0 ]; then
++		config_tmp="${IPKG_INSTROOT}/root/.ripe-atlas-config.$$"
++		umask 077
++		if [ -r "${cfg}" ]; then
++			sed -e '/^[[:space:]]*RXTXRPT=/d' \
++			    -e '/^[[:space:]]*HTTP_POST_PORT=/d' \
++			    "${cfg}" > "${config_tmp}" || {
++				rm -f "${config_tmp}"
++				return 1
++			}
+ 		else
+-			echo 1>/dev/null 2> "${cfg}"
++			: > "${config_tmp}" || return 1
++		fi
++		if [ ${rxtx_report} -ne 0 ]; then
++			echo 'RXTXRPT=yes' >> "${config_tmp}" || {
++				rm -f "${config_tmp}"
++				return 1
++			}
++		fi
++		if [ ${http_post_port} -ne 0 ]; then
++			echo "HTTP_POST_PORT=${http_post_port}" >> "${config_tmp}" || {
++				rm -f "${config_tmp}"
++				return 1
++			}
++		fi
++		if ! chown 0:${GROUP} "${config_tmp}" ||
++		   ! chmod 0640 "${config_tmp}" ||
++		   ! mv "${config_tmp}" "${cfg}"; then
++			rm -f "${config_tmp}"
++			return 1
+ 		fi
+ 	fi
+ 
 diff --git a/openwrt/files/ripe-atlas.uci-defaults b/openwrt/files/ripe-atlas.uci-defaults
-index 92e832f..7ef3aa6 100644
 --- a/openwrt/files/ripe-atlas.uci-defaults
 +++ b/openwrt/files/ripe-atlas.uci-defaults
 @@ -12,6 +12,7 @@ set ripe-atlas.@ripe-atlas[0].enabled='1'
